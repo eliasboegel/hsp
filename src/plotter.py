@@ -12,7 +12,10 @@ class Plotter:
         self.im = plt.imshow(np.zeros([1,1]))
         self.v = np.linspace(velocity_bounds[0], velocity_bounds[1], v_resolution)
         self.show = show
-        self.save_directory = Path(save_directory).mkdir(parents=True, exist_ok=True) # Create directory if it does not yet exist
+        
+        
+        Path(save_directory).mkdir(parents=True, exist_ok=True) # Create directory if it does not yet exist´
+        self.save_directory = save_directory
         print(self.save_directory)
 
 
@@ -47,7 +50,7 @@ class Plotter:
         if t is not None: plt.gca().set_title(f"t = {t:.3f}")
         plt.colorbar()
 
-        if self.save_directory is not None: plt.savefig(f"{save_directory}/{t_idx}_vdf.png")
+        if self.save_directory is not None: plt.savefig(f"{self.save_directory}/t{t:.4f}_vdf.png")
                         
         if self.show: plt.pause(delay)
 
@@ -62,5 +65,5 @@ class Plotter:
         plt.gca().set_xlabel(r"z")
         plt.legend()
         if t is not None: plt.gca().set_title(f"t = {t:.3f}")
-        if self.save_directory is not None: plt.savefig(f"{save_directory}/{t_idx}_coefficients.png")
+        if self.save_directory is not None: plt.savefig(f"{self.save_directory}/t{t:.4f}_coefficients.png")
         if self.show: plt.pause(delay)
