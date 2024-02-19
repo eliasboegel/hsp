@@ -27,13 +27,7 @@ domain = {
 
 def perturbed_maxwellian(i, j, k, z):
     if i==0 and j==0 and k==0:
-        return n0/alpha * (1 + 1e-1*np.cos(2*np.pi*(z)/(domain['R'] - domain['L'] + domain['hz'])))
-    else:
-        return 0
-    
-def maxwellian(i, j, k, z):
-    if i==0 and j==0 and k==0:
-        return n0/alpha
+        return n0/alpha * (1 + 1e-3*np.cos(2*np.pi*(z)/(domain['R'] - domain['L'] + domain['hz'])))
     else:
         return 0
 
@@ -60,11 +54,11 @@ p = hsp.Plotter(save_directory=save_directory, show=False)
 
 t_idx = 0
 p.plot1V(s.sys, [0,1], delay=0.5, t=t_idx*dt)
-# p.plot_coefficients(s.sys, 0, [[0,0,0]], normalize=True, delay=1, t=t_idx*dt)
+p.plot_coefficients(s.sys, 0, [[0,0,0], [0,0,n_modes//25], [0,0,n_modes//10], [0,0,n_modes//3], [0,0,n_modes-1]], normalize=True, delay=1, t=t_idx*dt)
 while t_idx*dt < t_final:
     s.step(dt)
     t_idx += 1
     print(f't = {t_idx*dt:.3f}, t_idx = {t_idx}')
     p.plot1V(s.sys, [0,1], E=s.E, t=t_idx*dt)
-    # p.plot_coefficients(s.sys, 0, [[0,0,0]], normalize=True, t=t_idx*dt)
+    p.plot_coefficients(s.sys, 0, [[0,0,0], [0,0,n_modes//25], [0,0,n_modes//10], [0,0,n_modes//3], [0,0,n_modes-1]], normalize=True, t=t_idx*dt)
     
