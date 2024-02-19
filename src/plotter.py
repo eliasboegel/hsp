@@ -59,7 +59,7 @@ class Plotter:
         for i,j,k in modes:
             vals = sys.C(s,i,j,k)
             vals_max, vals_min = vals.max(), vals.min()
-            if normalize and vals_max != 0 and vals_min != 0 and vals_max!=vals_max:
+            if normalize and vals_max!=vals_min:
                 vals = (vals - vals_min) / (vals_max - vals_min)
             plt.plot(vals, label=f"$C_{{{i},{j},{k}}}$, max={vals_max}")
         plt.gca().set_xlabel(r"z")
