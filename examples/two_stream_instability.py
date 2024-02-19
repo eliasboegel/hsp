@@ -1,41 +1,53 @@
+import numpy as np
+import matplotlib.pyplot as plt
 import sys
 import os
 sys.path.append(os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src')))
-from solver import Solver
-from species import Species
-from plotter import Plotter
-import numpy as np
-import matplotlib.pyplot as plt
+import hsp
+
+dt = 0.05
+t_final = 100
+n0 = 0.5
+v_th = 1/np.sqrt(8)
+alpha = np.sqrt(2) * v_th
+u_avg_1 = 1
+u_avg_2 = -1
+n_points = 199
+n_modes = 250
+integrator = hsp.Time.implicit_euler
+
+save_directory = f"../images/tsi_{n_points}z_{n_modes}vz"
+
 
 domain = {
     'L': 0, # Left boundary position
     'R': 2*np.pi, # Right boundary position
-    'N': 100 # Number of points
+    'N': n_points # Number of points
 }
 
-def perturbed_maxwellian1(i, j, k, z):
+def perturbed_maxwellian(i, j, k, z):
     if i==0 and j==0 and k==0:
-        return 0.5*(1 + 1e-2*np.cos(2*np.pi*z/(domain['R'] - domain['L']))) # Coefficient for first mode = Maxwellian
+        return n0/alpha * (1 + 1e-1*np.cos(2*np.pi*(z)/(domain['R'] - domain['L'] + domain['hz'])))
     else:
         return 0
     
-def perturbed_maxwellian2(i, j, k, z):
+def maxwellian(i, j, k, z):
     if i==0 and j==0 and k==0:
-        return 0.5*(1) # Coefficient for first mode = Maxwellian
+        return n0/alpha
     else:
         return 0
 
 species = [ # Arguments in order: charge number, atomic mass [u], u, alpha, collison_rate, ijk_max, BCs, initial_condition
-    Species(-1, 1, [0,0,1], [0.3,0.3,0.3], 5, [1,1,300], # Singly charged Xenon ions with 1 radial mode, 1 azimuth mode, 4 axial modes
+    hsp.Species(-1, 1, [0,0,u_avg_1], [1,1,alpha], 5, [1,1,n_modes], # Singly charged Xenon ions with 1 radial mode, 1 azimuth mode, 4 axial modes
     [
         {'type': 'P'}, # Left BC
         {'type': 'P'}, # Right BC
-    ], perturbed_maxwellian1),
-    Species(-1, 1, [0,0,-1], [0.3,0.3,0.3], 5, [1,1,300], # Singly charged Xenon ions with 1 radial mode, 1 azimuth mode, 4 axial modes
+    ], perturbed_maxwellian),
+    hsp.Species(-1, 1, [0,0,u_avg_2], [1,1,alpha], 5, [1,1,n_modes], # Singly charged Xenon ions with 1 radial mode, 1 azimuth mode, 4 axial modes
     [
         {'type': 'P'}, # Left BC
         {'type': 'P'}, # Right BC
-    ], perturbed_maxwellian2)
+    ], perturbed_maxwellian)
 ]
 
 E_bc = {
@@ -43,25 +55,16 @@ E_bc = {
     #'values': [300, 0] # Potential at left and right boundary if Dirichlet (type 'D') BC is used
 }
 
-s = Solver(domain, species, E_bc)
-p = Plotter()
+s = hsp.Solver(domain, species, integrator, E_bc)
+p = hsp.Plotter(save_directory=save_directory, show=False)
 
-p.plot1V(s.sys, [0,1], delay=1)
-# plt.ion()
-# plt.plot(s.sys.C(0,0,0,49,prev=True))
-# initial = s.sys.C(0,0,0,49,prev=True)
-# plt.pause(3)
-dt = 1
-t = 0
-for i in range(10000):
+t_idx = 0
+p.plot1V(s.sys, [0,1], delay=0.5, t=t_idx*dt)
+# p.plot_coefficients(s.sys, 0, [[0,0,0]], normalize=True, delay=1, t=t_idx*dt)
+while t_idx*dt < t_final:
     s.step(dt)
-    t += dt
-    print(f't = {t:.3f}')
-    p.plot1V(s.sys, [0,1])
-    # plt.clf()
-    # plt.plot(initial)
-    # plt.plot(s.sys.C(0,0,0,49,prev=True))
-    # plt.pause(1e-1)
+    t_idx += 1
+    print(f't = {t_idx*dt:.3f}, t_idx = {t_idx}')
+    p.plot1V(s.sys, [0,1], E=s.E, t=t_idx*dt)
+    # p.plot_coefficients(s.sys, 0, [[0,0,0]], normalize=True, t=t_idx*dt)
     
-    
-
