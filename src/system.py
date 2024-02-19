@@ -1,7 +1,6 @@
 import numpy as np
-from species import Species
 
-class System():
+class System(): # Class to manage DOFs in a single vector compatible with SciPy JFNK format
     def __init__(self, species, domain):
         self.num_species = len(species)
         self.species = species
@@ -9,17 +8,15 @@ class System():
         self.domain['hz'] = (self.domain['R'] - self.domain['L']) / self.domain['N']
         
         # Find total system size and create start/end index vectors
-        self.Cn_s_idx = np.zeros((self.num_species, 2), dtype=int) # Start and end indices for every species in current timestep DOF vector
-        self.Cnp1_s_idx = np.zeros((self.num_species, 2), dtype=int) # Start and end indices for every species in next timestep DOF vector
+        self.dof_idx = np.zeros((self.num_species, 2), dtype=int) # Start and end indices for every species in current timestep DOF vector
         system_size = 0
         for s in range(len(species)): # Iterate over all species
-            self.Cn_s_idx[s, 0] = system_size # Store start index
+            self.dof_idx[s, 0] = system_size # Store start index
             s_num_modes = self.species[s].num_modes.prod() # Number of modes for species s
             system_size += s_num_modes * self.domain['N'] # Add number of DOFs of current species to system size
-            self.Cn_s_idx[s, 1] = system_size # Store end index
+            self.dof_idx[s, 1] = system_size # Store end index
 
-        self.Cn = np.zeros(system_size) # Allocate current timestep DOF vector
-        self.Cnp1 = np.zeros(system_size) # Allocate next timestep DOF vector
+        self.dof = np.zeros(system_size) # Allocate DOF vector
 
         # Set initial condition with supplied initial condition function
         z = np.linspace(self.domain['L'], self.domain['R'], self.domain['N'])
@@ -27,37 +24,39 @@ class System():
             for i in range(self.species[s].num_modes[0]):
                 for j in range(self.species[s].num_modes[1]):
                     for k in range(self.species[s].num_modes[2]):
-                        idx = self.indices(s, i, j, k, prev=True)
-                        self.Cn[idx[0]:idx[1]] = self.species[s].initial(i, j, k, z)
+                        idx = self.indices(s, i, j, k)
+                        self.dof[idx[0]:idx[1]] = self.species[s].initial(i, j, k, z)
 
 
-    def C(self, s, i, j, k, prev=False): # Field C_ijk
+    def C(self, s, i, j, k): # Field C_ijk
         # Return zeroes if i or j or k are out of range
         ijk = np.array([i, j, k])
         num_modes = self.species[s].num_modes
         if not np.logical_and(0<=ijk, ijk<num_modes).all(): # Return zero if i, j or k fall out of range
             return 0
         
-        idx = self.indices(s, i, j, k, prev) # Compute indices into DOF vector for s, i, j, k
-        return self.Cn[idx[0]:idx[1]] if prev else self.Cnp1[idx[0]:idx[1]]
+        idx = self.indices(s, i, j, k) # Compute indices into DOF vector for s, i, j, k
+        return self.dof[idx[0]:idx[1]]
 
-    def dC(self, s, i, j, k, u, prev=False): # Spatial gradient of field C_ijk via central differences
+    def dC(self, s, i, j, k, u): # Spatial gradient of field C_ijk via central differences
         ijk = np.array([i, j, k])
         num_modes = self.species[s].num_modes
         if not np.logical_and(0<=ijk, ijk<num_modes).all(): # Return zero if i, j or k fall out of range
             return 0
         
-        field = self.C(s, i, j, k, prev) # Retrieve field
+        Cn = self.C(s, i, j, k) # Retrieve field
+        Cnm1 = np.roll(Cn, 1)
+        Cnp1 = np.roll(Cn, -1)
+
         bc = self.species[s].bc
 
         if bc[0]['type'] == 'P' and bc[1]['type'] == 'P': # Periodic BCs
-            # Upwind differences
-            # if u > 0: # If velocity is in +z, then upwind is in -z direction
-            #     diff = 1/(self.domain['hz']) * (np.roll(field, 1) - field)
-            # else: # If velocity is in -z, then upwind is in +z direction
-            #     diff = 1/(self.domain['hz']) * (field - np.roll(field, -1))
-            # print(diff)
-            diff = 1/(2*self.domain['hz']) * (np.roll(field, 1) - np.roll(field, -1))
+            diff = (Cnp1 - Cnm1) / (2*self.domain['hz']) # Central differences
+            # if u<0: # Upwind differences
+            #     diff = (Cn - Cnm1) / self.domain['hz']
+            # else:
+            #     diff = (Cnp1 - Cn) / self.domain['hz']
+                
             return diff * u
         else: # Dirichlet or Neumann BCs
             if bc[0]['type'] == 'D':
@@ -72,24 +71,30 @@ class System():
 
             padded_field = np.concatenate([[l_val], field, [r_val]])
             diff = 1/(2*self.domain['hz']) * (padded_field[2:] - padded_field[:-2])
-            return diff * u
+            return diff
 
-    def indices(self, s, i, j, k, prev=False):
-        s_idx = self.Cn_s_idx[s] #if prev else self.Cnp1_s_idx[s] # Get start and end indices for species s
+    def indices(self, s, i, j, k):
+        s_idx = self.dof_idx[s] # Get start and end indices for species s
         num_modes_i, num_modes_j, num_modes_k = self.species[s].num_modes # Get max number of i, j, k modes
 
-        # print('-----')
-        # print([i, j, k])
-        # print(self.species[s].num_modes)
         start_idx = s_idx[0] + ((num_modes_i * num_modes_j) * k + num_modes_i * j + i) * self.domain['N'] # Compute start index for s, i, j, k
         end_idx = start_idx + self.domain['N'] # Compute end index from start index
-        # print([start_idx, end_idx])
-        # print('-----')   
+
         return [start_idx, end_idx]
     
     def all_C(self, s):
-        s_idx = self.Cn_s_idx[s]
+        s_idx = self.dof_idx[s]
         num_modes = self.species[s].num_modes
-        C_list = self.Cn[s_idx[0]:s_idx[1]]
+        C_list = self.dof[s_idx[0]:s_idx[1]]
 
         return C_list.reshape((num_modes[0], num_modes[1], num_modes[2], -1)) # Reshape such that coefficients are returned as 4D array with axes i, j, k, spatial
+
+    def project_to(self, shift=None, scale=None, num_modes=None):
+        new_species = self.species
+        new_species.shift = shift
+        new_species.scale = scale
+
+        new_sys = System(new_species, self.domain)
+
+        raise NotImplementedError("System projection not implemented!")
+

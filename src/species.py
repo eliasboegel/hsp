@@ -6,8 +6,8 @@ class Species:
         # m [u], Mass in atomic mass units
         self.q = Z #* 1.602176634e-19 # Coulomb
         self.m = m #* 1.66054e-27 # kg
-        self.u = np.array(u)
-        self.alpha = np.array(alpha)
+        self.shift = np.array(u)
+        self.scale = np.array(alpha)
         self.collision_rate = collision_rate
         self.num_modes = np.array(num_modes)
 
