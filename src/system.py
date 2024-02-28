@@ -19,7 +19,7 @@ class System(): # Class to manage DOFs in a single vector compatible with SciPy 
         self.dof = np.zeros(system_size) # Allocate DOF vector
 
         # Set initial condition with supplied initial condition function
-        z = np.linspace(self.domain['L'], self.domain['R'], self.domain['N'])
+        z = np.linspace(self.domain['L'], self.domain['R'], self.domain['N'], endpoint=False)
         for s in range(len(self.species)): # Iterate over species, fill Cn for every species
             for i in range(self.species[s].num_modes[0]):
                 for j in range(self.species[s].num_modes[1]):
@@ -36,28 +36,28 @@ class System(): # Class to manage DOFs in a single vector compatible with SciPy 
             return 0
         
         idx = self.indices(s, i, j, k) # Compute indices into DOF vector for s, i, j, k
-        return self.dof[idx[0]:idx[1]]
+        vals = self.dof[idx[0]:idx[1]]
+        return vals
+        
 
-    def dC(self, s, i, j, k, u): # Spatial gradient of field C_ijk via central differences
+    def dC(self, s, i, j, k): # Spatial gradient of field C_ijk via central differences
         ijk = np.array([i, j, k])
         num_modes = self.species[s].num_modes
         if not np.logical_and(0<=ijk, ijk<num_modes).all(): # Return zero if i, j or k fall out of range
             return 0
         
         Cn = self.C(s, i, j, k) # Retrieve field
+        # Cnm2 = np.roll(Cn, 2)
         Cnm1 = np.roll(Cn, 1)
         Cnp1 = np.roll(Cn, -1)
+        # Cnp2 = np.roll(Cn, -2)
 
         bc = self.species[s].bc
 
         if bc[0]['type'] == 'P' and bc[1]['type'] == 'P': # Periodic BCs
-            diff = (Cnp1 - Cnm1) / (2*self.domain['hz']) # Central differences
-            # if u<0: # Upwind differences
-            #     diff = (Cn - Cnm1) / self.domain['hz']
-            # else:
-            #     diff = (Cnp1 - Cn) / self.domain['hz']
-                
-            return diff * u
+            diff = (Cnp1 - Cnm1) / (2*self.domain['hz']) # 2nd order central differences
+            # diff = (-Cnp2 + 8*Cnp1 - 8*Cnm1 + Cnm2) / (12*self.domain['hz']) # 4th order central differences
+            return diff
         else: # Dirichlet or Neumann BCs
             if bc[0]['type'] == 'D':
                 l_val = bc[0]['values'](i, j, k)

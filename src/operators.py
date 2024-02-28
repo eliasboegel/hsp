@@ -13,15 +13,9 @@ class Advection:
     @staticmethod
     def cartesian(sys, s, i, j, k):
         terms = 0
-        terms += sys.dC(s, i, j, k,
-            sys.species[s].shift[2]
-        )
-        terms += sys.dC(s, i, j, k-1,
-            np.sqrt(k/2) * sys.species[s].scale[2]
-        )
-        terms += sys.dC(s, i, j, k+1,
-            np.sqrt((k+1)/2) * sys.species[s].scale[2]
-        )
+        terms += sys.dC(s, i, j, k)   * sys.species[s].shift[2]
+        terms += sys.dC(s, i, j, k-1) * np.sqrt(k/2) * sys.species[s].scale[2]
+        terms += sys.dC(s, i, j, k+1) * np.sqrt((k+1)/2) * sys.species[s].scale[2]
         return terms
 
     @staticmethod
