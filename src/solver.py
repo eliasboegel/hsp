@@ -30,10 +30,11 @@ class Solver:
 
 
         # LHS using lowest order central differences
+        hz = (sys.domain['R'] - sys.domain['L']) / sys.domain['N']
         e0 = 8.8541878128e-12 # Vacuum permittivity [F/m]
         a0 = -2*np.ones(sys.domain["N"]) # Values for main diagonal
         a1 = np.ones(sys.domain["N"]-1) # Values for -1st and 1st diagonals
-        b = sys.domain['hz']**2 * charge_density # RHS
+        b = hz**2 * charge_density # RHS
         
         if self.E_bc['type'] == 'P':
             # Tridiagonal matrix with additional single element on top right and bottom left for periodicity
@@ -46,7 +47,7 @@ class Solver:
             b = b - b.mean() # It is necessary to fix int(b)dz = 0 to make the periodic BC system well conditioned
 
             pot = spsolve(A, b)
-            E = 1/(2*sys.domain['hz']) * (np.roll(pot, -1) - np.roll(pot, 1))
+            E = 1/(2*hz) * (np.roll(pot, -1) - np.roll(pot, 1))
         elif self.E_bc['type'] == 'D':
             A = spa.diags(
                 [a1, a0, a1],
@@ -82,9 +83,9 @@ class Solver:
             for i in range(sys.species[s].num_modes[0]):
                 for j in range(sys.species[s].num_modes[1]):
                     for k in range(sys.species[s].num_modes[2]):
-                        idx = sys.indices(s, i, j, k) # Get indices of components for given species and mode
+                        idx = sys.indices_spatial(s, i, j, k) # Get indices of components for given species and mode
 
-                        root_vector[idx[0]:idx[1]] = self.integrator(
+                        root_vector[idx] = self.integrator(
                             self.sys, # Current timestep system (as held in Solver object as current state)
                             sys, # Current JFNK inner iteration estimate for system at next timestep
                             KineticEquation.cartesian, # Kinetic equation operator to use
@@ -93,6 +94,20 @@ class Solver:
                         )
 
         return root_vector # Return root vector
+
+    def adapt(self):
+
+        # Compute current mean velocity and temperature
+        # Change species shift and scaling parameter to new mean velocity & temperature
+        # Project old system to new system
+
+        new_species = deepcopy(self.sys.species)
+        new_species[0].shift[2] *= 1.25
+        # new_species[0].shift[2] *= 0.75
+        # new_species[0].scale[2] *= 1.5
+        new_species[0].scale[2] *= 0.75
+
+        self.sys.project(new_species) # Project system to new basis
 
     def step(self, dt):
         # Set up new system to be modified in each JFNK inner iteration

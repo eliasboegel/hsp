@@ -2,12 +2,10 @@ import numpy as np
 
 class Species:
     def __init__(self, Z, m, u, alpha, collision_rate, num_modes, bc, initial):
-        # Z [-], Charge number
-        # m [u], Mass in atomic mass units
-        self.q = Z #* 1.602176634e-19 # Coulomb
-        self.m = m #* 1.66054e-27 # kg
-        self.shift = np.array(u)
-        self.scale = np.array(alpha)
+        self.q = Z # Charge number
+        self.m = m # Dimensionless mass
+        self.shift = np.array(u, dtype=float)
+        self.scale = np.array(alpha, dtype=float)
         self.collision_rate = collision_rate
         self.num_modes = np.array(num_modes)
 
