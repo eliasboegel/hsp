@@ -12,10 +12,23 @@ class Collision():
 class Advection:
     @staticmethod
     def cartesian(sys, s, i, j, k):
+        hz = (sys.domain['R'] - sys.domain['L']) / sys.domain['N']
+        u = sys.shift(s)
+        du = sys.shift_grad(s)
+        a = sys.scale(s)
+        da = sys.scale_grad(s)
         terms = 0
-        terms += sys.dC(s, i, j, k)   * sys.species[s].shift[2]
-        terms += sys.dC(s, i, j, k-1) * np.sqrt(k/2) * sys.species[s].scale[2]
-        terms += sys.dC(s, i, j, k+1) * np.sqrt((k+1)/2) * sys.species[s].scale[2]
+        # Terms for spatially constant Hermite parameters
+        terms += sys.C_grad(s,i,j,k+1) * np.sqrt((k+1)/2)*a[2]
+        terms += sys.C_grad(s,i,j,k) * u[2]
+        terms += sys.C_grad(s,i,j,k-1) * np.sqrt(k/2)*a[2]
+        # Additional terms for spatially varying Hermite parameters (u, a varying)
+        terms += sys.C(s,i,j,k+1) * (k+2)*np.sqrt((k+1)/2)*da[2]
+        terms += sys.C(s,i,j,k) * (k+1)*( du[2] + u[2]*da[2]/a[2] )
+        terms += sys.C(s,i,j,k-1) * ( k*np.sqrt(k/2)*da[2] + np.sqrt(2*k)*u[2]*du[2]/a[2] + (k+1)*np.sqrt(k/2)*da[2] ) 
+        terms += sys.C(s,i,j,k-2) * np.sqrt(k*(k-1))*( u[2]*da[2]/a[2] + du[2] )
+        terms += sys.C(s,i,j,k-3) * np.sqrt(k*(k-1)*(k-2)/2)*da[2]
+
         return terms
 
     @staticmethod
@@ -47,7 +60,6 @@ class KineticEquation(): # Implementation of kinetic equation in form dC/dt = te
         terms -= Advection.cartesian(sys, s, i, j, k)
         terms -= Acceleration.electric(sys, s, i, j, k, E)
         terms += Collision.lenard_bernstein(sys, s, i, j, k)
-        # print(terms)
         return terms
 
 class Time(): # Implicit time discretization operators in format f=0

@@ -20,6 +20,27 @@ class System(): # Class to manage DOFs in a single vector compatible with SciPy 
                         idx = self.indices_spatial(s, i, j, k)
                         self.dof[idx] = self.species[s].initial(i, j, k, z)
 
+    def shift(self, s):
+        return self.species[s].shift
+
+    def shift_grad(self, s):
+        hz = (self.domain['R'] - self.domain['L']) / self.domain['N']
+        # shift_nm2 = np.roll(self.species[s].shift, 2, axis=1)
+        shift_nm1 = np.roll(self.species[s].shift, 1, axis=1)
+        shift_np1 = np.roll(self.species[s].shift, -1, axis=1)
+        # shift_np2 = np.roll(self.species[s].shift, -2, axis=1)
+        shift_grad = (shift_np1 - shift_nm1) / (2*hz) # 2nd order FD
+        # shift_grad = (-shift_np2 + 8*shift_np1 - 8*shift_nm1 + shift_nm2) / (12*hz) # 4th order FD
+        return shift_grad
+
+    def scale(self, s):
+        return self.species[s].scale
+
+    def scale_grad(self, s):
+        hz = (self.domain['R'] - self.domain['L']) / self.domain['N']
+        scale_grad = (np.roll(self.species[s].scale, -1, axis=1) - np.roll(self.species[s].scale, 1, axis=1)) / (2*hz)
+        return scale_grad
+
     def C(self, s, i, j, k): # Field C_ijk
         # Return zeroes if i or j or k are out of range
         ijk = np.array([i, j, k])
@@ -31,7 +52,7 @@ class System(): # Class to manage DOFs in a single vector compatible with SciPy 
         vals = self.dof[idx]
         return vals
         
-    def dC(self, s, i, j, k): # Spatial gradient of field C_ijk via central differences
+    def C_grad(self, s, i, j, k): # Spatial gradient of field C_ijk via central differences
         hz = (self.domain['R'] - self.domain['L']) / self.domain['N']
 
         ijk = np.array([i, j, k])
@@ -115,7 +136,7 @@ class System(): # Class to manage DOFs in a single vector compatible with SciPy 
             j_1d = np.repeat(np.tile(np.arange(self.species[s].num_modes[1]), self.species[s].num_modes[0]), self.species[s].num_modes[2])
             k_1d = np.tile(np.arange(self.species[s].num_modes[2]), self.species[s].num_modes[0]*self.species[s].num_modes[1])
 
-            # Create matrices stacking the 1d index vectors into i,j,k (old DOFs) and n,m,p (new DOFs) index matrices
+            # Create matrices stacking the 1d index vectors into i,j,k (old DOFs) and n,m,p (new DOFs) index matrices, i.e. a matrix with a unique combination of i,j,k,n,m,p for every element
             a = np.tile(i_1d, (num_dof, 1))
             b = np.tile(j_1d, (num_dof, 1))
             c = np.tile(k_1d, (num_dof, 1))
@@ -130,43 +151,55 @@ class System(): # Class to manage DOFs in a single vector compatible with SciPy 
                 C_old = self.dof[idx]
                 C_new = C_old # C_new is temporary state to which transformations are applied
 
+                np.seterr(divide='ignore', invalid='ignore') # Next section intentionally contains divide by zero resulting in inf, which is overwritten with zeroes in all cases
+
                 # Compute shift parameter transform
-                if not np.array_equal(self.species[s].shift, new_species[s].shift): # If shift parameters have changed
-                    shift_transform = np.sqrt( (ssp.factorial(d) * ssp.factorial(e) * ssp.factorial(f))/(ssp.factorial(a) * ssp.factorial(b) * ssp.factorial(c) * ssp.factorial(d-a)**2 * ssp.factorial(e-b)**2 * ssp.factorial(f-c)**2 ) * np.power(2, d+e+f-a-b-c, dtype=float) )
-                    shift_transform[d-a<0] = 0
-                    shift_transform[e-b<0] = 0
-                    shift_transform[f-c<0] = 0
-                    
-                    if self.species[s].shift[0] != new_species[s].shift[0]: # If first shift parameter has changed
-                        shift_transform_x = shift_transform * np.power( (self.species[s].shift[0] - new_species[s].shift[0])/self.species[s].scale[0], d+e+f-a-b-c, dtype=float)
-                        C_new = shift_transform_x @ C_new # Apply x-shift transform
-                    if self.species[s].shift[1] != new_species[s].shift[1]: # If second shift parameter has changed
-                        shift_transform_y = shift_transform * np.power( (self.species[s].shift[1] - new_species[s].shift[1])/self.species[s].scale[1], d+e+f-a-b-c, dtype=float)
-                        C_new = shift_transform_y @ C_new # Apply y-shift transform
-                    if self.species[s].shift[2] != new_species[s].shift[2]: # If third shift parameter has changed
-                        shift_transform_z = shift_transform * np.power( (self.species[s].shift[2] - new_species[s].shift[2])/self.species[s].scale[2], d+e+f-a-b-c, dtype=float)
-                        C_new = shift_transform_z @ C_new # Apply z-shift transform
+                shift_transform = np.sqrt( (ssp.factorial(d) * ssp.factorial(e) * ssp.factorial(f))/(ssp.factorial(a) * ssp.factorial(b) * ssp.factorial(c) * np.power(ssp.factorial(d-a), 2, dtype=float) * np.power(ssp.factorial(e-b), 2, dtype=float) * np.power(ssp.factorial(f-c), 2, dtype=float) ) * np.power(2, d+e+f-a-b-c, dtype=float) )
+                shift_transform[d-a<0] = 0
+                shift_transform[e-b<0] = 0
+                shift_transform[f-c<0] = 0
+                
+                
+                if np.any(self.species[s].shift[0] != new_species[s].shift[0]): # If first shift parameter has changed
+                    shift_transform_x = shift_transform * np.power( (self.species[s].shift[0,z_idx] - new_species[s].shift[0,z_idx])/self.species[s].scale[0,z_idx], d+e+f-a-b-c, dtype=float)
+                    shift_transform_x = np.nan_to_num(shift_transform_x)
+                    C_new = shift_transform_x @ C_new # Apply x-shift transform
+                if np.any(self.species[s].shift[1] != new_species[s].shift[1]): # If second shift parameter has changed
+                    shift_transform_y = shift_transform * np.power( (self.species[s].shift[1,z_idx] - new_species[s].shift[1,z_idx])/self.species[s].scale[1,z_idx], d+e+f-a-b-c, dtype=float)
+                    shift_transform_y = np.nan_to_num(shift_transform_y)
+                    C_new = shift_transform_y @ C_new # Apply y-shift transform
+                if np.any(self.species[s].shift[2] != new_species[s].shift[2]): # If third shift parameter has changed
+                    shift_transform_z = shift_transform * np.power( (self.species[s].shift[2,z_idx] - new_species[s].shift[2,z_idx])/self.species[s].scale[2,z_idx], d+e+f-a-b-c, dtype=float)
+                    shift_transform_z = np.nan_to_num(shift_transform_z)
+                    C_new = shift_transform_z @ C_new # Apply z-shift transform
+                    if np.logical_not(np.isfinite(shift_transform_z)).sum() > 0:
+                        np.set_printoptions(threshold=1000000)
+                        print(shift_transform_z)
 
             
                 # Compute shift parameter transform
-                if not np.array_equal(self.species[s].scale, new_species[s].scale): # If scale parameters have changed
-                    scale_transform = np.sqrt( (ssp.factorial2(d) * ssp.factorial2(e) * ssp.factorial2(f) * ssp.factorial2(d-1) * ssp.factorial2(e-1) * ssp.factorial2(f-1))/(ssp.factorial(a) * ssp.factorial(b) * ssp.factorial(c) * ssp.factorial2(d-a)**2 * ssp.factorial2(e-b)**2 * ssp.factorial2(f-c)**2 ) )
-                    scale_transform[d-a<0] = 0
-                    scale_transform[e-b<0] = 0
-                    scale_transform[f-c<0] = 0
-                    scale_transform[(a+d)%2!=0] = 0 # Set a+d odd to zero
-                    scale_transform[(b+e)%2!=0] = 0 # Set b+e odd to zero
-                    scale_transform[(c+f)%2!=0] = 0 # Set c+f odd to zero
-                    
-                    if self.species[s].scale[0] != new_species[s].scale[0]: # If first scale parameter has changed
-                        scale_transform_x = scale_transform * np.power(self.species[s].scale[0], a+b+c+1, dtype=float) / np.power(new_species[s].scale[0], d+e+f+1, dtype=float) * np.nan_to_num(np.power(self.species[s].scale[0]**2 - new_species[s].scale[0]**2, (d+e+f-a-b-c)/2, dtype=float))
-                        C_new = scale_transform_x @ C_new # Apply z-scale transform
-                    if self.species[s].scale[1] != new_species[s].scale[1]: # If second scale parameter has changed
-                        scale_transform_y = scale_transform * np.power(self.species[s].scale[1], a+b+c+1, dtype=float) / np.power(new_species[s].scale[1], d+e+f+1, dtype=float) * np.nan_to_num(np.power(self.species[s].scale[1]**2 - new_species[s].scale[1]**2, (d+e+f-a-b-c)/2, dtype=float))
-                        C_new = scale_transform_y @ C_new # Apply y-scale transform
-                    if self.species[s].scale[2] != new_species[s].scale[2]: # If third scale parameter has changed
-                        scale_transform_z = scale_transform * np.power(self.species[s].scale[2], a+b+c+1, dtype=float) / np.power(new_species[s].scale[2], d+e+f+1, dtype=float) * np.nan_to_num(np.power(self.species[s].scale[2]**2 - new_species[s].scale[2]**2, (d+e+f-a-b-c)/2, dtype=float))
-                        C_new = scale_transform_z @ C_new # Apply z-scale transform
+                scale_transform = np.sqrt( (ssp.factorial2(d) * ssp.factorial2(e) * ssp.factorial2(f) * ssp.factorial2(d-1) * ssp.factorial2(e-1) * ssp.factorial2(f-1))/(ssp.factorial(a) * ssp.factorial(b) * ssp.factorial(c) * ssp.factorial2(d-a)**2 * ssp.factorial2(e-b)**2 * ssp.factorial2(f-c)**2 ) )
+                scale_transform[d-a<0] = 0
+                scale_transform[e-b<0] = 0
+                scale_transform[f-c<0] = 0
+                scale_transform[(a+d)%2!=0] = 0 # Set a+d odd to zero
+                scale_transform[(b+e)%2!=0] = 0 # Set b+e odd to zero
+                scale_transform[(c+f)%2!=0] = 0 # Set c+f odd to zero
+                
+                if np.any(self.species[s].scale[0] != new_species[s].scale[0]): # If first scale parameter has changed
+                    scale_transform_x = scale_transform * np.power(self.species[s].scale[0,z_idx], a+b+c+1, dtype=float) / np.power(new_species[s].scale[0,z_idx], d+e+f+1, dtype=float) * np.power(self.species[s].scale[0,z_idx]**2 - new_species[s].scale[0,z_idx]**2, (d+e+f-a-b-c)/2, dtype=float)
+                    scale_transform_x = np.nan_to_num(scale_transform_x)
+                    C_new = scale_transform_x @ C_new # Apply z-scale transform
+                if np.any(self.species[s].scale[1] != new_species[s].scale[1]): # If second scale parameter has changed
+                    scale_transform_y = scale_transform * np.power(self.species[s].scale[1,z_idx], a+b+c+1, dtype=float) / np.power(new_species[s].scale[1,z_idx], d+e+f+1, dtype=float) * np.power(self.species[s].scale[1,z_idx]**2 - new_species[s].scale[1,z_idx]**2, (d+e+f-a-b-c)/2, dtype=float)
+                    scale_transform_y = np.nan_to_num(scale_transform_y)
+                    C_new = scale_transform_y @ C_new # Apply y-scale transform
+                if np.any(self.species[s].scale[2] != new_species[s].scale[2]): # If third scale parameter has changed
+                    scale_transform_z = scale_transform * np.power(self.species[s].scale[2,z_idx], a+b+c+1, dtype=float) / np.power(new_species[s].scale[2,z_idx], d+e+f+1, dtype=float) * np.power(self.species[s].scale[2,z_idx]**2 - new_species[s].scale[2,z_idx]**2, (d+e+f-a-b-c)/2, dtype=float)
+                    scale_transform_z = np.nan_to_num(scale_transform_z)
+                    C_new = scale_transform_z @ C_new # Apply z-scale transform
+
+                np.seterr(divide='warn', invalid='warn') # Reset warning level for div-by-zero
 
                 self.dof[idx] = C_new # Set DOFs in new system
 
