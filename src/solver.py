@@ -100,24 +100,19 @@ class Solver:
 
         for s in range(len(self.sys.species)):
 
-            # Compute current spatial average of current mean velocity
+            # Compute mean velocity and derive candidate for new shift parameter
             mean_velocity = Moments.mean_velocity(self.sys, s)
             candidate_shift = mean_velocity
             
-            # Smooth candidate shift
-            # candidate_shift = gaussian_filter1d(candidate_shift, self.sys.domain['N']/25, axis=1, mode="wrap")
-            # print(candidate_shift.shape)
+            # Smooth candidate shift to prevent destructive feedback oscillations in shift parameter
+            candidate_shift = gaussian_filter1d(candidate_shift, self.sys.domain['N']/50, axis=1, mode="wrap")
 
-
+            # Uncomment to disable spatial adaptivity (and retain time adaptivity)
             # candidate_shift[0] = candidate_shift[0].mean()
             # candidate_shift[1] = candidate_shift[1].mean()
             # candidate_shift[2] = candidate_shift[2].mean()
-            # print(candidate_shift.shape)
 
-            # print(f"s: {s}, max: {candidate_shift[2].max()}, min: {candidate_shift[2].min()}")
-
-            # TODO: Compute current spatial average of temperature and candidate scale
-            # ...
+            # Compute current thermal velocity and derive candidate for new scale parameter
             thermal_velocity_tensor = Moments.thermal_velocity_tensor(self.sys, s)
             candidate_scale = np.empty_like(candidate_shift)
             candidate_scale[0] = np.sqrt(2) * thermal_velocity_tensor[0,0]
