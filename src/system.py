@@ -25,12 +25,9 @@ class System(): # Class to manage DOFs in a single vector compatible with SciPy 
 
     def shift_grad(self, s):
         hz = (self.domain['R'] - self.domain['L']) / self.domain['N']
-        # shift_nm2 = np.roll(self.species[s].shift, 2, axis=1)
         shift_nm1 = np.roll(self.species[s].shift, 1, axis=1)
         shift_np1 = np.roll(self.species[s].shift, -1, axis=1)
-        # shift_np2 = np.roll(self.species[s].shift, -2, axis=1)
         shift_grad = (shift_np1 - shift_nm1) / (2*hz) # 2nd order FD
-        # shift_grad = (-shift_np2 + 8*shift_np1 - 8*shift_nm1 + shift_nm2) / (12*hz) # 4th order FD
         return shift_grad
 
     def scale(self, s):
@@ -204,9 +201,30 @@ class System(): # Class to manage DOFs in a single vector compatible with SciPy 
                 self.dof[idx] = C_new # Set DOFs in new system
 
 
-        # Overwrite old data with new data, currently assumes that number of modes does not change
-        new_system_size = self.domain['N'] * np.sum([s.num_modes.prod() for s in new_species])
-        self.species = new_species
-        # FOLLOWING LINE MUST BE CHANGED IF EXPANSION ORDER CHANGES
-        # self.dof_idx = self.indices_species(new_species) # Compute and store start and end indices for each species
+        # TODO: Add or remove Hermite modes
+        if np.any([np.any(self.species[s].num_modes != new_species[s].num_modes) for s in len(self.species)]): # Check if mode number was changed for any species
+            new_system_size = self.domain['N'] * np.sum([s.num_modes.prod() for s in new_species])
+            new_dof = np.zeros(new_system_size) # Allocate new DOF vector
+            new_dof_idx = self.indices_species(new_species) # Compute and store start and end indices for each species
 
+            # TODO: Move DOFs from old to new vector
+            for s in range(len(new_species)):
+                for i in range(self.species[s].num_modes[0]):
+                    for j in range(self.species[s].num_modes[1]):
+                        for k in range(self.species[s].num_modes[2]):
+                            # Uses same logic as indices_spatial() but for new species and new DOF vector
+                            s_idx = new_dof_idx[s] # Get start and end indices for species s
+                            num_modes_i, num_modes_j, num_modes_k = new_species[s].num_modes # Get max number of i, j, k modes
+                            start_idx = s_idx[0] + ((num_modes_i * num_modes_j) * k + num_modes_i * j + i) * self.domain['N'] # Compute start index for s, i, j, k
+                            end_idx = start_idx + self.domain['N'] # Compute end index from start index
+                            idx = np.arange(start_idx, end_idx)
+
+                            # Write DOFs to new DOF vector
+                            # If new basis has fewer modes, then the cut off modes are removed
+                            # If new basis has more modes, then the remaining ones stay initialized with zeroes as the mode iteration doesn't reach all new modes
+                            new_dof[idx] = self.C(s, i, j, k)
+                            
+            # Write new DOFs and DOF indices to system
+            self.species = new_species
+            self.dof = new_dof
+            self.dof_idx = new_dof_idx
