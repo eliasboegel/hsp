@@ -37,21 +37,64 @@ class Advection:
 
 class Acceleration():
     @staticmethod
-    def electric(sys, s, i, j, k, E):
+    def electric(sys, s, i, j, k, E): 
         terms = - E * sys.species[s].q/sys.species[s].m * np.sqrt(2*k) / sys.species[s].scale[2] * sys.C(s, i, j, k-1)
         return terms
 
     @staticmethod
     def magnetic(sys, s, i, j, k, B):
-        raise NotImplementedError("Magnetic field acceleration operator not implemented!")
+        u = sys.shift(s)
+        du = sys.shift_grad(s)
+        a = sys.scale(s)
+        da = sys.scale_grad(s)
+        terms = 0
+        # Component 1
+        terms += - sys.species[s].q/sys.species[s].m * B[2] * np.sqrt(2*i)/a[0] * (a[1]*np.sqrt((j+1)/2)*sys.C(s,i-1,j+1,k) + u[1]*sys.C(s,i-1,j,k) + a[1]*np.sqrt(j/2)*sys.C(s,i-1,j-1,k))
+        terms +=   sys.species[s].q/sys.species[s].m * B[0] * np.sqrt(2*i)/a[0] * (a[2]*np.sqrt((k+1)/2)*sys.C(s,i-1,j,k+1) + u[2]*sys.C(s,i-1,j,k) + a[2]*np.sqrt(k/2)*sys.C(s,i-1,j,k-1))
+        # Component 2
+        terms += - sys.species[s].q/sys.species[s].m * B[0] * np.sqrt(2*j)/a[1] * (a[2]*np.sqrt((k+1)/2)*sys.C(s,i,j-1,k+1) + u[2]*sys.C(s,i,j-1,k) + a[2]*np.sqrt(k/2)*sys.C(s,i,j-1,k-1))
+        terms +=   sys.species[s].q/sys.species[s].m * B[2] * np.sqrt(2*j)/a[1] * (a[0]*np.sqrt((i+1)/2)*sys.C(s,i+1,j-1,k) + u[0]*sys.C(s,i,j-1,k) + a[0]*np.sqrt(i/2)*sys.C(s,i-1,j-1,k))
+        # Component 3
+        terms += - sys.species[s].q/sys.species[s].m * B[1] * np.sqrt(2*k)/a[2] * (a[0]*np.sqrt((i+1)/2)*sys.C(s,i+1,j,k-1) + u[0]*sys.C(s,i,j,k-1) + a[0]*np.sqrt(i/2)*sys.C(s,i-1,j,k-1))
+        terms +=   sys.species[s].q/sys.species[s].m * B[0] * np.sqrt(2*k)/a[2] * (a[1]*np.sqrt((j+1)/2)*sys.C(s,i,j+1,k-1) + u[1]*sys.C(s,i,j,k-1) + a[1]*np.sqrt(j/2)*sys.C(s,i,j-1,k-1))
+        
+        return terms        
 
     @staticmethod
     def centripetal(sys, s, i, j, k):
-        raise NotImplementedError("Centripetal acceleration operator not implemented!")
+        u = sys.shift(s)
+        du = sys.shift_grad(s)
+        a = sys.scale(s)
+        da = sys.scale_grad(s)
+        terms = 0
+        terms += sys.C(s,i-1,j+2,k) * a[1]**2/2 * np.sqrt((j+1)*(j+2))
+        terms += sys.C(s,i-1,j-1,k) * u[1]*a[1] * ( np.sqrt((j+1)/2) + np.sqrt(2*j))
+        terms += sys.C(s,i-1,j,k) * ( u[1]**2 + a[1]**2*(j+1/2) )
+        terms += sys.C(s,i-1,j+1,k) * u[1]*a[1] * np.sqrt((j+1)/2)
+        terms += sys.C(s,i-1,j-2,k) * a[1]**2/2 * np.sqrt(j*(j-1))
+
+        terms *= - 1/r*np.sqrt(2*i)/a[0]
+        return terms
 
     @staticmethod
     def coriolis(sys, s, i, j, k):
-        raise NotImplementedError("Coriolis acceleration operator not implemented!")
+        u = sys.shift(s)
+        du = sys.shift_grad(s)
+        a = sys.scale(s)
+        da = sys.scale_grad(s)
+        terms = 0
+        terms += sys.C(s,i+1,j,k) * (j+1) * np.sqrt((i+1)/2) * a[0]
+        terms += sys.C(s,i,j,k) * (j+1) * u[0]
+        terms += sys.C(s,i-1,j,k) * (j+1) * np.sqrt(i/2) * a[0]
+        terms += sys.C(s,i+1,j-1,k) * np.sqrt(j*(j+1)) * a[0]/a[1]*u[1]
+        terms += sys.C(s,i-1,j,k) * np.sqrt(2*j) * u[1]/a[1]*u[0]
+        terms += sys.C(s,i-1,j-1,k) * np.sqrt(i*j) * a[0]/a[1]
+        terms += sys.C(s,i+1,j-2,k) * np.sqrt(j*(j-1)*(i+1)/2) * a[0]
+        terms += sys.C(s,i,j-2,k) * np.sqrt(j*(j-1)) * u[0]
+        terms += sys.C(s,i-1,j-2,k) * np.sqrt(i*j*(j-1)/2) * a[0]
+
+        terms *= 2/r
+        return terms
 
 class KineticEquation(): # Implementation of kinetic equation in form dC/dt = terms
     @staticmethod
@@ -59,6 +102,18 @@ class KineticEquation(): # Implementation of kinetic equation in form dC/dt = te
         terms = 0
         terms -= Advection.cartesian(sys, s, i, j, k)
         terms -= Acceleration.electric(sys, s, i, j, k, E)
+        terms -= Acceleration.magnetic(sys, s, i, j, k, B)
+        terms += Collision.lenard_bernstein(sys, s, i, j, k)
+        return terms
+
+    @staticmethod
+    def cylindrical(sys, s, i, j, k, E=0, B=0):
+        terms = 0
+        terms -= Advection.cylindrical(sys, s, i, j, k)
+        terms -= Acceleration.electric(sys, s, i, j, k, E)
+        terms -= Acceleration.magnetic(sys, s, i, j, k, B)
+        terms -= Acceleration.centripetal(sys, s, i, j, k)
+        terms -= Acceleration.coriolis(sys, s, i, j, k)
         terms += Collision.lenard_bernstein(sys, s, i, j, k)
         return terms
 
