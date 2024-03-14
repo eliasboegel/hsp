@@ -9,6 +9,11 @@ class Collision():
         coll_k = k*(k-1)*(k-2)/(N[2]*(N[2]-1)*(N[2]-2)) if N[2]>2 else 0
         return - sys.species[s].collision_rate * sys.C(s, i, j, k) * (coll_i + coll_j + coll_k)
 
+    @staticmethod
+    def BGK(sys):
+        raise NotImplementedError("BGK operator not yet implemented")
+
+
 class Advection:
     @staticmethod
     def cartesian(sys, s, i, j, k):
@@ -37,7 +42,7 @@ class Advection:
 
 class Acceleration():
     @staticmethod
-    def electric(sys, s, i, j, k, E): 
+    def electric(sys, s, i, j, k, E): # Only one component as model is 1D and therefore Ey=0, Ez=0
         terms = - E * sys.species[s].q/sys.species[s].m * np.sqrt(2*k) / sys.species[s].scale[2] * sys.C(s, i, j, k-1)
         return terms
 
@@ -72,7 +77,6 @@ class Acceleration():
         terms += sys.C(s,i-1,j,k) * ( u[1]**2 + a[1]**2*(j+1/2) )
         terms += sys.C(s,i-1,j+1,k) * u[1]*a[1] * np.sqrt((j+1)/2)
         terms += sys.C(s,i-1,j-2,k) * a[1]**2/2 * np.sqrt(j*(j-1))
-
         terms *= - 1/r*np.sqrt(2*i)/a[0]
         return terms
 
@@ -92,7 +96,6 @@ class Acceleration():
         terms += sys.C(s,i+1,j-2,k) * np.sqrt(j*(j-1)*(i+1)/2) * a[0]
         terms += sys.C(s,i,j-2,k) * np.sqrt(j*(j-1)) * u[0]
         terms += sys.C(s,i-1,j-2,k) * np.sqrt(i*j*(j-1)/2) * a[0]
-
         terms *= 2/r
         return terms
 
