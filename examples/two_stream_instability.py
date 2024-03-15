@@ -6,7 +6,7 @@ sys.path.append(os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__
 import hsp
 
 dt = 0.1
-t_final = 50
+t_final = 100
 n0 = 0.5
 v_th = 1/np.sqrt(8)
 alpha = np.sqrt(2) * v_th
@@ -14,9 +14,10 @@ u_avg_1 = 1
 u_avg_2 = -1
 n_points = 50
 n_modes = 25
+shift_adaptivity = "xt"
+scale_adaptivity = "xt"
 integrator = hsp.Time.implicit_euler
-
-save_directory = f"../images/tsi_{n_points}z_{n_modes}vz_u-xt_a-t"
+save_directory = f"../images/tsi_{n_points}z_{n_modes}vz_u-{shift_adaptivity}f_a-{scale_adaptivity}f_plottest"
 
 
 domain = {
@@ -61,15 +62,24 @@ E_bc = {
 
 
 s = hsp.Solver(domain, species, integrator, E_bc)
-p = hsp.Plotter(save_directory=save_directory, show=False)
+p = hsp.Plotter(save_directory=save_directory)
 
-t_idx = 0
-p.plot1V(s.sys, [0,1], delay=1, t=t_idx*dt)
-p.plot_coefficients(s.sys, 0, [[0,0,0], [0,0,n_modes//25], [0,0,n_modes//10], [0,0,n_modes//3], [0,0,n_modes-1]], normalize=True, delay=1, t=t_idx*dt)
-while t_idx*dt < t_final:
+ts = dt * np.arange(1, int(t_final/dt) + 1)
+p.plot1V(s.sys, [0,1], t=0, E=s.E)
+E_norm = np.zeros_like(ts)
+for t_idx in range(ts.shape[0]):
+    t = ts[t_idx]
+    print(f't = {t:.3f}')
     s.step(dt)
-    s.adapt()
-    t_idx += 1
-    print(f't = {t_idx*dt:.3f}, t_idx = {t_idx}')
-    p.plot1V(s.sys, [0,1], E=s.E, t=t_idx*dt)
-    p.plot_coefficients(s.sys, 0, [[0,0,0], [0,0,n_modes//25], [0,0,n_modes//10], [0,0,n_modes//3], [0,0,n_modes-1]], normalize=True, t=t_idx*dt)
+    s.adapt(shift_mode=shift_adaptivity, scale_mode=scale_adaptivity)
+    E_norm[t_idx] = np.linalg.norm(s.E, 1) # Record 1-norm of electric field
+    p.plot1V(s.sys, [0,1], t=t, E=s.E)
+
+# Plot electric field norm evolution over time
+plt.clf()
+plt.plot(ts, E_norm)
+plt.gca().set_yscale("log")
+plt.gca().set_xlabel(r"$t$ [-]")
+plt.gca().set_ylabel(r"$|E|_1$ [-]")
+plt.savefig(f"{save_directory}/E_norm.png")
+plt.show()
