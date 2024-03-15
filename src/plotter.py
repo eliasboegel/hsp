@@ -18,9 +18,8 @@ class Plotter:
 
 
     def plot1V(self, sys, species_ids, t=None, E=None):
-        plt.clf()
         gridspec = {'width_ratios': [20, 1], 'height_ratios': [3,1,1]}
-        fig, axs = plt.subplots(3, 2, sharex=True, gridspec_kw=gridspec, figsize=(8,8))
+        fig, axs = plt.subplots(3, 2, gridspec_kw=gridspec, figsize=(8,8))
         vals = np.zeros([sys.domain['N'], self.v_resolution])
 
         if t is not None: fig.suptitle(f"t = {t:.3f}")
@@ -48,17 +47,15 @@ class Plotter:
         
         im = axs[0,0].imshow(vals.T, origin='lower', extent=[sys.domain['L'], sys.domain['R'], self.velocity_bounds[0], self.velocity_bounds[1]], cmap="jet", aspect="auto")
         axs[0,0].set_ylabel(r"v")
+        axs[0,0].set_xlabel(r"z")
         axs[0,0].set_title(f"VDF & Shift parameter")
-        plt.colorbar(im, cax=axs[0,1])
-
-
-
+        
+        # Handle periodicity in plotting
+        periodic = sys.species[0].bc[0]["type"] == 'P' or sys.species[0].bc[1]["type"] == 'P'
         z = np.linspace(sys.domain['L'], sys.domain['R'], sys.domain['N'], endpoint=False)
-        # Draw electric field
-        if E is not None:
-            axs[1,0].plot(z, E)
-        axs[1,0].set_title(f"Electric field")
-        axs[1,1].axis('off')
+        if periodic:
+            z = np.append(z, sys.domain['R'])
+            E = np.append(E, E[0])
 
         # Draw scale parameter
         for s in species_ids:
@@ -66,17 +63,23 @@ class Plotter:
             color = next(axs[0,0]._get_lines.prop_cycler)['color']
             shift = sys.species[s].shift[velocity_axis]
             scale = sys.species[s].scale[velocity_axis]
-            if sys.species[s].bc[0]["type"] == 'P' or sys.species[s].bc[1]["type"] == 'P':
-                z_s = np.append(z, sys.domain['R'])
+            if periodic:
                 shift = np.append(shift, shift[0])
                 scale = np.append(scale, scale[0])
-            axs[0,0].plot(z_s, shift, color=color, label=f"Species {s}")
-            axs[2,0].plot(z_s, scale, color=color)
-        axs[2,0].set_title(f"Scale parameter")
+            axs[0,0].plot(z, shift, color=color, label=f"Species {s}")
+            axs[1,0].plot(z, scale, color=color)
+        axs[1,0].set_title(f"Scale parameter")
+        axs[1,1].axis('off')
+
+        # Draw electric field
+        if E is not None:
+            axs[2,0].plot(z, E)
+        axs[2,0].set_title(f"Electric field")
         axs[2,1].axis('off')
 
         handles, labels = axs[0,0].get_legend_handles_labels()
         fig.legend(handles, labels, loc='lower center', ncol=len(handles))
+        plt.colorbar(im, cax=axs[0,1])
 
         if self.save_directory is not None: plt.savefig(f"{self.save_directory}/t{t:.4f}_vdf.png")    
 
