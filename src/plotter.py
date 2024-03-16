@@ -69,19 +69,24 @@ class Plotter:
             axs[0,0].plot(z, shift, color=color, label=f"Species {s}")
             axs[1,0].plot(z, scale, color=color)
         axs[1,0].set_title(f"Scale parameter")
+        axs[1,0].set_xlim(sys.domain['L'], sys.domain['R'])
         axs[1,1].axis('off')
 
         # Draw electric field
         if E is not None:
             axs[2,0].plot(z, E)
         axs[2,0].set_title(f"Electric field")
+        axs[2,0].set_xlim(sys.domain['L'], sys.domain['R'])
         axs[2,1].axis('off')
-
+    
+        plt.tight_layout()
         handles, labels = axs[0,0].get_legend_handles_labels()
-        fig.legend(handles, labels, loc='lower center', ncol=len(handles))
+        legend = fig.legend(handles, labels, loc='upper right', bbox_to_anchor=[1.05,0.425], ncol=1, frameon=False)
         plt.colorbar(im, cax=axs[0,1])
+        
+        if self.save_directory is not None: plt.savefig(f"{self.save_directory}/t{t:.4f}_vdf.png", bbox_inches='tight')
 
-        if self.save_directory is not None: plt.savefig(f"{self.save_directory}/t{t:.4f}_vdf.png")    
+        plt.clf() # Clear plot for any subsequent matplotlib calls
 
     def plot_coefficients(self, sys, s, modes, normalize=False, t=None):
         plt.clf()
