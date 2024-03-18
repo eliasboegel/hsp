@@ -18,6 +18,7 @@ class Plotter:
 
 
     def plot1V(self, sys, species_ids, t=None, E=None):
+        plt.close()
         gridspec = {'width_ratios': [20, 1], 'height_ratios': [3,1,1]}
         fig, axs = plt.subplots(3, 2, gridspec_kw=gridspec, figsize=(8,8))
         vals = np.zeros([sys.domain['N'], self.v_resolution])
@@ -90,7 +91,7 @@ class Plotter:
         plt.clf() # Clear plot for any subsequent matplotlib calls
 
     def plot_coefficients(self, sys, s, modes, normalize=False, t=None):
-        plt.clf()
+        plt.close()
         for i,j,k in modes:
             vals = sys.C(s,i,j,k)
             vals_max, vals_min = vals.max(), vals.min()
