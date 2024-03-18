@@ -41,7 +41,7 @@ class Plotter:
                 elif (velocity_axis==2):
                     C_x = C_s[0,0,:,z_idx]
                 
-                C_x_HF = (np.power(2, n, dtype=float) * ssp.factorial(n) * np.pi)**-0.5 * C_x # Include (2^n * n! * sqrt(pi))^-0.5 term in coefficients
+                C_x_HF = np.float_power(2, -0.5*n) * (ssp.factorial(n) * np.pi)**-0.5 * C_x # Include (2^n * n! * sqrt(pi))^-0.5 term in coefficients
                 xi = (self.v - sys.species[s].shift[velocity_axis, z_idx]) / sys.species[s].scale[velocity_axis, z_idx]
                 vals[z_idx,:] += np.polynomial.hermite.hermval(xi, C_x_HF) * np.exp(-xi**2) # Evaluate Hermite function series
         
@@ -69,9 +69,10 @@ class Plotter:
             axs[0,0].plot(z, shift, color=color, label=f"Species {s}")
             axs[1,0].plot(z, scale, color=color)
         axs[1,0].set_title(f"Scale parameter")
+        axs[1,0].ticklabel_format(useOffset=False)
         axs[1,0].set_xlim(sys.domain['L'], sys.domain['R'])
         axs[1,1].axis('off')
-
+        
         # Draw electric field
         if E is not None:
             axs[2,0].plot(z, E)
