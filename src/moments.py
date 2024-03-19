@@ -3,7 +3,7 @@ import numpy as np
 class Moments():
     @staticmethod # Zero-order moment
     def number_density(sys, s):
-        number_density = sys.species[s].scale.prod(axis=0) * sys.C(s,0,0,0)
+        number_density = sys.scale(s).prod(axis=0) * sys.C(s,0,0,0)
         return number_density
 
     @staticmethod # Zero-order moment
@@ -19,9 +19,9 @@ class Moments():
     @staticmethod # First-order moment
     def mean_velocity(sys, s):
         mean_velocity = np.empty((3, sys.domain['N']))
-        mean_velocity[0] = sys.species[s].shift[0] + np.sqrt(1/2) * sys.species[s].scale[0] * sys.C(s, 1, 0, 0) / sys.C(s, 0, 0, 0)
-        mean_velocity[1] = sys.species[s].shift[1] + np.sqrt(1/2) * sys.species[s].scale[1] * sys.C(s, 0, 1, 0) / sys.C(s, 0, 0, 0)
-        mean_velocity[2] = sys.species[s].shift[2] + np.sqrt(1/2) * sys.species[s].scale[2] * sys.C(s, 0, 0, 1) / sys.C(s, 0, 0, 0)
+        mean_velocity[0] = sys.shift(s)[0] + np.sqrt(1/2) * sys.scale(s)[0] * sys.C(s, 1, 0, 0) / sys.C(s, 0, 0, 0)
+        mean_velocity[1] = sys.shift(s)[1] + np.sqrt(1/2) * sys.scale(s)[1] * sys.C(s, 0, 1, 0) / sys.C(s, 0, 0, 0)
+        mean_velocity[2] = sys.shift(s)[2] + np.sqrt(1/2) * sys.scale(s)[2] * sys.C(s, 0, 0, 1) / sys.C(s, 0, 0, 0)
         return mean_velocity
 
     @staticmethod # First-order moment
@@ -30,12 +30,12 @@ class Moments():
 
     @staticmethod # Second-order moment
     def pressure_tensor(sys, s):
-        v_diff = sys.species[s].shift - Moments.mean_velocity(sys, s)
+        v_diff = sys.shift(s) - Moments.mean_velocity(sys, s)
         pressure_tensor = np.zeros((3, 3, sys.domain['N']))
         # Fill diagonals
-        pressure_tensor[0,0] = sys.species[s].scale.prod(axis=0) * sys.species[s].scale[0] / np.sqrt(2) * (sys.C(s,2,0,0) + 2*v_diff[0]*sys.C(s,1,0,0) + (sys.species[s].scale[0]/np.sqrt(2) + v_diff[0]**2)*sys.C(s,0,0,0) )
-        pressure_tensor[1,1] = sys.species[s].scale.prod(axis=0) * sys.species[s].scale[1] / np.sqrt(2) * (sys.C(s,0,2,0) + 2*v_diff[1]*sys.C(s,0,1,0) + (sys.species[s].scale[1]/np.sqrt(2) + v_diff[1]**2)*sys.C(s,0,0,0) )
-        pressure_tensor[2,2] = sys.species[s].scale.prod(axis=0) * sys.species[s].scale[2] / np.sqrt(2) * (sys.C(s,0,0,2) + 2*v_diff[2]*sys.C(s,0,0,1) + (sys.species[s].scale[2]/np.sqrt(2) + v_diff[2]**2)*sys.C(s,0,0,0) )
+        pressure_tensor[0,0] = sys.scale(s).prod(axis=0) * sys.scale(s)[0] / np.sqrt(2) * (sys.C(s,2,0,0) + 2*v_diff[0]*sys.C(s,1,0,0) + (sys.scale(s)[0]/np.sqrt(2) + v_diff[0]**2)*sys.C(s,0,0,0) )
+        pressure_tensor[1,1] = sys.scale(s).prod(axis=0) * sys.scale(s)[1] / np.sqrt(2) * (sys.C(s,0,2,0) + 2*v_diff[1]*sys.C(s,0,1,0) + (sys.scale(s)[1]/np.sqrt(2) + v_diff[1]**2)*sys.C(s,0,0,0) )
+        pressure_tensor[2,2] = sys.scale(s).prod(axis=0) * sys.scale(s)[2] / np.sqrt(2) * (sys.C(s,0,0,2) + 2*v_diff[2]*sys.C(s,0,0,1) + (sys.scale(s)[2]/np.sqrt(2) + v_diff[2]**2)*sys.C(s,0,0,0) )
 
         # TODO: Anisotropic components of pressure tensor
         # ...

@@ -5,15 +5,25 @@ class System(): # Class to manage DOFs in a single vector compatible with SciPy 
     def __init__(self, species, domain, evaluate_initial=True):
         system_size = domain['N'] * np.sum([s.num_modes.prod() for s in species])
         self.species = species
+        self.shifts = np.zeros((len(species), 3, domain['N']))
+        self.scales = np.zeros((len(species), 3, domain['N']))
         self.domain = domain
         self.dof = np.zeros(system_size) # Allocate DOF vector
         self.dof_idx = self.indices_species(species) # Compute and store start and end indices for each species
+        self.set_hermite_parameters(species) # Set shift and scale parameters for each species
         self.set_initial_condition(species) # Set initial condition with supplied initial condition function
+
+    def set_hermite_parameters(self, species):
+        for s in range(len(species)): # Iterate over species, set shift and scale parameters for each
+            # Set shift and scale parameter
+            for axis in [0,1,2]:
+                self.shifts[s,axis] = species[s].shift[axis]
+                self.scales[s,axis] = species[s].scale[axis]
 
     def set_initial_condition(self, species):
         z = np.linspace(self.domain['L'], self.domain['R'], self.domain['N'], endpoint=False)
 
-        for s in range(len(self.species)): # Iterate over species, fill Cn for every species
+        for s in range(len(species)): # Iterate over species, fill Cn for every species
             for i in range(self.species[s].num_modes[0]):
                 for j in range(self.species[s].num_modes[1]):
                     for k in range(self.species[s].num_modes[2]):
@@ -21,21 +31,23 @@ class System(): # Class to manage DOFs in a single vector compatible with SciPy 
                         self.dof[idx] = self.species[s].initial(i, j, k, z)
 
     def shift(self, s):
-        return self.species[s].shift
+        return self.shifts[s]
 
     def shift_grad(self, s):
         hz = (self.domain['R'] - self.domain['L']) / self.domain['N']
-        shift_nm1 = np.roll(self.species[s].shift, 1, axis=1)
-        shift_np1 = np.roll(self.species[s].shift, -1, axis=1)
+        shift_nm1 = np.roll(self.shifts[s], 1, axis=1)
+        shift_np1 = np.roll(self.shifts[s], -1, axis=1)
         shift_grad = (shift_np1 - shift_nm1) / (2*hz) # 2nd order FD
         return shift_grad
 
     def scale(self, s):
-        return self.species[s].scale
+        return self.scales[s]
 
     def scale_grad(self, s):
         hz = (self.domain['R'] - self.domain['L']) / self.domain['N']
-        scale_grad = (np.roll(self.species[s].scale, -1, axis=1) - np.roll(self.species[s].scale, 1, axis=1)) / (2*hz)
+        scale_nm1 = np.roll(self.scales[s], 1, axis=1)
+        scale_np1 = np.roll(self.scales[s], -1, axis=1)
+        scale_grad = (scale_np1 - scale_nm1) / (2*hz) # 2nd order FD
         return scale_grad
 
     def C(self, s, i, j, k): # Field C_ijk

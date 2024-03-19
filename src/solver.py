@@ -3,7 +3,7 @@ import numpy as np
 import scipy.sparse as spa
 from scipy.sparse.linalg import spsolve
 from scipy.optimize import newton_krylov
-from scipy.ndimage import uniform_filter1d, gaussian_filter1d
+from scipy.ndimage import gaussian_filter1d
 import matplotlib.pyplot as plt
 
 from species import Species
@@ -17,6 +17,7 @@ class Solver:
         self.sys = System(species, domain)
         self.integrator = integrator
         self.E_bc = E_bc
+        self.E = self.solve_poisson(self.sys, periodic=True)
 
     def solve_poisson(self, sys, periodic=False):
         # Using centered finite differences, with Dirichlet BC, potential(x=0) = potential [V], potential(x=L) = 0 [V]
@@ -86,63 +87,67 @@ class Solver:
                             sys, # Current JFNK inner iteration estimate for system at next timestep
                             KineticEquation.cartesian, # Kinetic equation operator to use
                             dt, # Time step
-                            s, i, j, k, E=self.E, B=0 # Mode information and EM fields
+                            s, i, j, k, E=self.E, B=[0,0,0] # Mode information and EM fields
                         )
 
         return root_vector # Return root vector
 
-    def adapt(self, shift_threshold=0.01, scale_threshold=0.01):
+    def adapt(self, shift_mode=None, shift_threshold=0.01, scale_mode=None, scale_threshold=0.01, mode_add_thresholds=1e-12, mode_remove_threshold=1e-14):
         new_species = deepcopy(self.sys.species)
 
         # Compute current mean velocity and temperature
         # Change species shift and scaling parameter to new mean velocity & temperature
         # Project old system to new system
-
+        species_changed = 0
         for s in range(len(self.sys.species)):
-
-            # Compute mean velocity and derive candidate for new shift parameter
-            mean_velocity = Moments.mean_velocity(self.sys, s)
-            candidate_shift = mean_velocity
-            
-            # Smooth candidate shift to prevent destructive feedback oscillations in shift parameter
-            candidate_shift = gaussian_filter1d(candidate_shift, self.sys.domain['N']/50, axis=1, mode="wrap")
-
-            # Uncomment to disable spatial adaptivity (and retain time adaptivity)
-            # candidate_shift[0] = candidate_shift[0].mean()
-            # candidate_shift[1] = candidate_shift[1].mean()
-            # candidate_shift[2] = candidate_shift[2].mean()
-
-            # Compute current thermal velocity and derive candidate for new scale parameter
-            thermal_velocity_tensor = Moments.thermal_velocity_tensor(self.sys, s)
-            candidate_scale = np.empty_like(candidate_shift)
-            candidate_scale[0] = np.sqrt(2) * thermal_velocity_tensor[0,0]
-            candidate_scale[1] = np.sqrt(2) * thermal_velocity_tensor[1,1]
-            candidate_scale[2] = np.sqrt(2) * thermal_velocity_tensor[2,2]
-            candidate_scale[0] = candidate_scale[0].mean()
-            candidate_scale[1] = candidate_scale[1].mean()
-            candidate_scale[2] = candidate_scale[2].mean()
-
-            # Set new basis if substantially candidate parameters are different from current parameters and perform solution projection
-            for i in range(3):
-                shift_adapt_mask = np.abs(new_species[s].shift[i] - candidate_shift[i]) > shift_threshold
-                scale_adapt_mask = np.abs(new_species[s].scale[i] - candidate_scale[i]) > scale_threshold
-                if np.any(shift_adapt_mask):
-                    new_species[s].shift[i] = candidate_shift[i]
-                    print(f"Shift parameter adapted for species {s} in axis {i}")
-                if np.any(scale_adapt_mask):
-                    new_species[s].scale[i] = candidate_scale[i]
-                    print(f"Scale parameter adapted for species {s} in axis {i}")
+            shift_changed = False
+            scale_changed = False
+            if shift_mode == "xt" or shift_mode == "t":
+                # Compute mean velocity and derive candidate for new shift parameter
+                mean_velocity = Moments.mean_velocity(self.sys, s)
+                candidate_shift = mean_velocity
                 
-        self.sys.project(new_species) # Project system to new basis
+                # Smooth candidate shift to prevent instability in shift parameter
+                candidate_shift = gaussian_filter1d(candidate_shift, self.sys.domain['N']/25, axis=1, mode="wrap")
+                
+                for i in range(3):
+                    if shift_mode == "t": candidate_shift[i] = candidate_shift[i].mean() # If adaptivity mode is only in time, use spatial average
+                    shift_adapt_mask = np.abs(new_species[s].shift[i] - candidate_shift[i]) > shift_threshold
+                    if np.any(shift_adapt_mask):
+                        new_species[s].shift[i] = candidate_shift[i]
+                        shift_changed = True
+                        print(f"Shift parameter adapted for species {s} in axis {i}")
+
+            if scale_mode == "xt" or scale_mode == "t":
+                # Compute current thermal velocity and derive candidate for new scale parameter
+                thermal_velocity_tensor = Moments.thermal_velocity_tensor(self.sys, s)
+                candidate_scale = np.empty_like(candidate_shift)
+                candidate_scale[0] = np.sqrt(2) * thermal_velocity_tensor[0,0]
+                candidate_scale[1] = np.sqrt(2) * thermal_velocity_tensor[1,1]
+                candidate_scale[2] = np.sqrt(2) * thermal_velocity_tensor[2,2]
+
+                for i in range(3):
+                    if scale_mode == "t": candidate_scale[i] = candidate_scale[i].mean() # If adaptivity mode is only in time, use spatial average
+                    scale_adapt_mask = np.abs(new_species[s].scale[i] - candidate_scale[i]) > scale_threshold
+                    if np.any(scale_adapt_mask):
+                        new_species[s].scale[i] = candidate_scale[i]
+                        scale_changed = True
+                        print(f"Scale parameter adapted for species {s} in axis {i}")
+
+            species_changed += shift_changed or scale_changed
+        if species_changed > 0: self.sys.project(new_species) # Project system to new basis if any species changed basis
 
     def step(self, dt):
         # Set up new system to be modified in each JFNK inner iteration
         # When adaptivity in time is introduced, then write projection from one System to another
         sys = deepcopy(self.sys) # Copy old state, works provided no modes are added or removed for next timestep
 
+
+
         # Call SciPy JFNK implementation, store result in current timestep system
         self.sys.dof = newton_krylov(lambda x: self.nonlinear_system(x, sys, dt), sys.dof,
                                     method='lgmres',
+                                    inner_M=Preconditioner.linear_ilu(sys, self.E, [0,0,0]),
                                     x_rtol=1e-8,
                                     verbose=True)
 

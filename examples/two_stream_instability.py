@@ -5,19 +5,21 @@ import os
 sys.path.append(os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src')))
 import hsp
 
+# Electron-electron two-stream instability represented with two separate electron species, one for each beam
+
 dt = 0.1
-t_final = 100
+t_final = 120
 n0 = 0.5
 v_th = 1/np.sqrt(8)
 alpha = np.sqrt(2) * v_th
 u_avg_1 = 1
 u_avg_2 = -1
-n_points = 50
-n_modes = 25
+n_points = 100
+n_modes = 50
 shift_adaptivity = "xt"
-scale_adaptivity = "xt"
+scale_adaptivity = "t"
 integrator = hsp.Time.implicit_euler
-save_directory = f"../images/tsi_{n_points}z_{n_modes}vz_u-{shift_adaptivity}f_a-{scale_adaptivity}f_plottest"
+save_directory = f"../images/tsi_{n_points}z_{n_modes}vz_u-{shift_adaptivity}f_a-{scale_adaptivity}"
 
 
 domain = {
@@ -25,29 +27,21 @@ domain = {
     'R': 2*np.pi, # Right boundary position
     'N': n_points # Number of points
 }
-hz = (domain['R'] - domain['L']) / domain['N']
 
 def perturbed_maxwellian(i, j, k, z):
     if i==0 and j==0 and k==0:
-        return n0/alpha * (1 + 1e-1*np.cos(2*np.pi*z/(domain['R'] - domain['L'])))
+        return n0/alpha * (1 + 1e-3*np.cos(2*np.pi*z/(domain['R'] - domain['L'])))
     else:
         return 0
 
-shift_initial_1 = np.zeros((3, domain['N']))
-shift_initial_1[2] = u_avg_1
-shift_initial_2 = np.zeros((3, domain['N']))
-shift_initial_2[2] = u_avg_2
-scale_initial = np.ones((3, domain['N']))
-scale_initial[2] = alpha
-
 
 species = [ # Arguments in order: charge number, mass, u, alpha, collison_rate, ijk_max, BCs, initial_condition
-    hsp.Species(-1, 1, shift_initial_1, scale_initial, 5, [1,1,n_modes], # First beam
+    hsp.Species(-1, 1, [0,0,u_avg_1], [1,1,alpha], 5, [1,1,n_modes], # First beam
     [
         {'type': 'P'}, # Left BC
         {'type': 'P'}, # Right BC
     ], perturbed_maxwellian),
-    hsp.Species(-1, 1, shift_initial_2, scale_initial, 5, [1,1,n_modes], # Second beam
+    hsp.Species(-1, 1, [0,0,u_avg_2], [1,1,alpha], 5, [1,1,n_modes], # Second beam
     [
         {'type': 'P'}, # Left BC
         {'type': 'P'}, # Right BC
@@ -62,7 +56,7 @@ E_bc = {
 
 
 s = hsp.Solver(domain, species, integrator, E_bc)
-p = hsp.Plotter(save_directory=save_directory)
+p = hsp.Plotter(save_directory=save_directory, velocity_bounds=[-2.5,2.5])
 
 ts = dt * np.arange(1, int(t_final/dt) + 1)
 p.plot1V(s.sys, [0,1], t=0, E=s.E)
@@ -76,7 +70,6 @@ for t_idx in range(ts.shape[0]):
     p.plot1V(s.sys, [0,1], t=t, E=s.E)
 
 # Plot electric field norm evolution over time
-plt.clf()
 plt.plot(ts, E_norm)
 plt.gca().set_yscale("log")
 plt.gca().set_xlabel(r"$t$ [-]")

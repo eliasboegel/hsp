@@ -42,7 +42,7 @@ class Plotter:
                     C_x = C_s[0,0,:,z_idx]
                 
                 C_x_HF = np.float_power(2, -0.5*n) * (ssp.factorial(n) * np.pi)**-0.5 * C_x # Include (2^n * n! * sqrt(pi))^-0.5 term in coefficients
-                xi = (self.v - sys.species[s].shift[velocity_axis, z_idx]) / sys.species[s].scale[velocity_axis, z_idx]
+                xi = (self.v - sys.shift(s)[velocity_axis, z_idx]) / sys.scale(s)[velocity_axis, z_idx]
                 vals[z_idx,:] += np.polynomial.hermite.hermval(xi, C_x_HF) * np.exp(-xi**2) # Evaluate Hermite function series
         
         im = axs[0,0].imshow(vals.T, origin='lower', extent=[sys.domain['L'], sys.domain['R'], self.velocity_bounds[0], self.velocity_bounds[1]], cmap="jet", aspect="auto")
@@ -61,8 +61,8 @@ class Plotter:
         for s in species_ids:
             velocity_axis = np.argmax(sys.species[s].num_modes>1) # Find which velocity axis is the relevant one (i.e. the only one with >1 modes)
             color = next(axs[0,0]._get_lines.prop_cycler)['color']
-            shift = sys.species[s].shift[velocity_axis]
-            scale = sys.species[s].scale[velocity_axis]
+            shift = sys.shift(s)[velocity_axis]
+            scale = sys.scale(s)[velocity_axis]
             if periodic:
                 shift = np.append(shift, shift[0])
                 scale = np.append(scale, scale[0])

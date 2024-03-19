@@ -13,9 +13,10 @@ alpha = np.sqrt(2) * v_th
 u_avg = 0
 n_points = 100
 n_modes = 50
+shift_adaptivity = "t"
+scale_adaptivity = "t"
 integrator = hsp.Time.implicit_euler
-
-save_directory = f"../images/ld_{n_points}z_{n_modes}vz_u-xt_a-xt"
+save_directory = f"../images/ld_{n_points}z_{n_modes}vz_u-{shift_adaptivity}f_a-{scale_adaptivity}"
 
 
 domain = {
@@ -31,14 +32,9 @@ def perturbed_maxwellian(i, j, k, z):
     else:
         return 0
 
-shift_initial = np.zeros((3, domain['N']))
-shift_initial[2] = u_avg
-scale_initial = np.ones((3, domain['N']))
-scale_initial[2] = alpha
-
 
 species = [ # Arguments in order: charge number, mass, u, alpha, collison_rate, ijk_max, BCs, initial_condition
-    hsp.Species(-1, 1, shift_initial, scale_initial, 1, [1,1,n_modes], # First beam
+    hsp.Species(-1, 1, [0,0,u_avg], [1,1,alpha], 1, [1,1,n_modes], # First beam
     [
         {'type': 'P'}, # Left BC
         {'type': 'P'}, # Right BC
@@ -53,18 +49,18 @@ E_bc = {
 
 
 s = hsp.Solver(domain, species, integrator, E_bc)
-p = hsp.Plotter(save_directory=save_directory, show=False, velocity_bounds=[-5,5])
+p = hsp.Plotter(save_directory=save_directory, velocity_bounds=[-5,5])
 
 ts = dt * np.arange(1, int(t_final/dt) + 1)
-p.plot1V(s.sys, [0], delay=1, t=0)
+p.plot1V(s.sys, [0], t=0, E=s.E)
 E_norm = np.zeros_like(ts)
 for t_idx in range(ts.shape[0]):
     t = ts[t_idx]
     print(f't = {t:.3f}')
     s.step(dt)
-    s.adapt()
+    s.adapt(shift_mode=shift_adaptivity, scale_mode=scale_adaptivity)
     E_norm[t_idx] = np.linalg.norm(s.E, 1) # Record 1-norm of electric field
-    p.plot1V(s.sys, [0], t=t)
+    p.plot1V(s.sys, [0], t=t, E=s.E)
 
 # Plot electric field norm evolution over time
 plt.clf()

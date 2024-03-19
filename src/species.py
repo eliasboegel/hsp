@@ -4,8 +4,8 @@ class Species:
     def __init__(self, Z, m, u, alpha, collision_rate, num_modes, bc, initial):
         self.q = Z # Charge number
         self.m = m # Dimensionless mass
-        self.shift = np.array(u, dtype=float)
-        self.scale = np.array(alpha, dtype=float)
+        self.shift = u
+        self.scale = alpha
         self.collision_rate = collision_rate
         self.num_modes = np.array(num_modes)
 
