@@ -2,7 +2,7 @@ import numpy as np
 import scipy.special as ssp
 
 class System(): # Class to manage DOFs in a single vector compatible with SciPy JFNK format
-    def __init__(self, species, domain, evaluate_initial=True):
+    def __init__(self, species, domain):
         system_size = domain['N'] * np.sum([s.num_modes.prod() for s in species])
         self.species = species
         self.shifts = np.zeros((len(species), 3, domain['N']))
@@ -130,7 +130,7 @@ class System(): # Class to manage DOFs in a single vector compatible with SciPy 
 
         return C_list.reshape((num_modes[0], num_modes[1], num_modes[2], -1)) # Reshape such that coefficients are returned as 4D array with axes i, j, k, spatial
 
-    def project(self, new_species): # Projects the system to a new basis defined by new_species
+    def project(self, new_shift, new_scale): # Projects the system to a new basis
 
         # Different transformation must be applied for every spatial coordinate if spatial adaptivity is enabled
         # Therefore, loop over spatial coordinates
@@ -169,16 +169,16 @@ class System(): # Class to manage DOFs in a single vector compatible with SciPy 
                 shift_transform[f-c<0] = 0
                 
                 
-                if np.any(self.species[s].shift[0] != new_species[s].shift[0]): # If first shift parameter has changed
-                    shift_transform_x = shift_transform * np.float_power( (self.species[s].shift[0,z_idx] - new_species[s].shift[0,z_idx])/self.species[s].scale[0,z_idx], d+e+f-a-b-c)
+                if np.any(self.shift(s)[0] != new_shift[s,0]): # If first shift parameter has changed
+                    shift_transform_x = shift_transform * np.float_power( (self.shift(s)[0,z_idx] - new_shift[s,0,z_idx])/self.scale(s)[0,z_idx], d+e+f-a-b-c)
                     shift_transform_x = np.nan_to_num(shift_transform_x)
                     C_new = shift_transform_x @ C_new # Apply x-shift transform
-                if np.any(self.species[s].shift[1] != new_species[s].shift[1]): # If second shift parameter has changed
-                    shift_transform_y = shift_transform * np.float_power( (self.species[s].shift[1,z_idx] - new_species[s].shift[1,z_idx])/self.species[s].scale[1,z_idx], d+e+f-a-b-c)
+                if np.any(self.shift(s)[1] != new_shift[s,1]): # If second shift parameter has changed
+                    shift_transform_y = shift_transform * np.float_power( (self.shift(s)[1,z_idx] - new_shift[s,1,z_idx])/self.scale(s)[1,z_idx], d+e+f-a-b-c)
                     shift_transform_y = np.nan_to_num(shift_transform_y)
                     C_new = shift_transform_y @ C_new # Apply y-shift transform
-                if np.any(self.species[s].shift[2] != new_species[s].shift[2]): # If third shift parameter has changed
-                    shift_transform_z = shift_transform * np.float_power( (self.species[s].shift[2,z_idx] - new_species[s].shift[2,z_idx])/self.species[s].scale[2,z_idx], d+e+f-a-b-c)
+                if np.any(self.shift(s)[2] != new_shift[s,2]): # If third shift parameter has changed
+                    shift_transform_z = shift_transform * np.float_power( (self.shift(s)[2,z_idx] - new_shift[s,2,z_idx])/self.scale(s)[2,z_idx], d+e+f-a-b-c)
                     shift_transform_z = np.nan_to_num(shift_transform_z)
                     C_new = shift_transform_z @ C_new # Apply z-shift transform
                     if np.logical_not(np.isfinite(shift_transform_z)).sum() > 0:
@@ -195,49 +195,50 @@ class System(): # Class to manage DOFs in a single vector compatible with SciPy 
                 scale_transform[(b+e)%2!=0] = 0 # Set b+e odd to zero
                 scale_transform[(c+f)%2!=0] = 0 # Set c+f odd to zero
                 
-                if np.any(self.species[s].scale[0] != new_species[s].scale[0]): # If first scale parameter has changed
-                    scale_transform_x = scale_transform * np.float_power(self.species[s].scale[0,z_idx], a+b+c+1) / np.float_power(new_species[s].scale[0,z_idx], d+e+f+1) * np.float_power(self.species[s].scale[0,z_idx]**2 - new_species[s].scale[0,z_idx]**2, (d+e+f-a-b-c)/2)
+                if np.any(self.scale(s)[0] != new_scale[s,0]): # If first scale parameter has changed
+                    scale_transform_x = scale_transform * np.float_power(self.scale(s)[0,z_idx], a+b+c+1) / np.float_power(new_scale[s,0,z_idx], d+e+f+1) * np.float_power(self.scale(s)[0,z_idx]**2 - new_scale[s,0,z_idx]**2, (d+e+f-a-b-c)/2)
                     scale_transform_x = np.nan_to_num(scale_transform_x)
                     C_new = scale_transform_x @ C_new # Apply z-scale transform
-                if np.any(self.species[s].scale[1] != new_species[s].scale[1]): # If second scale parameter has changed
-                    scale_transform_y = scale_transform * np.float_power(self.species[s].scale[1,z_idx], a+b+c+1) / np.float_power(new_species[s].scale[1,z_idx], d+e+f+1) * np.float_power(self.species[s].scale[1,z_idx]**2 - new_species[s].scale[1,z_idx]**2, (d+e+f-a-b-c)/2)
+                if np.any(self.scale(s)[1] != new_scale[s,1]): # If second scale parameter has changed
+                    scale_transform_y = scale_transform * np.float_power(self.scale(s)[1,z_idx], a+b+c+1) / np.float_power(new_scale[s,1,z_idx], d+e+f+1) * np.float_power(self.scale(s)[1,z_idx]**2 - new_scale[s,1,z_idx]**2, (d+e+f-a-b-c)/2)
                     scale_transform_y = np.nan_to_num(scale_transform_y)
                     C_new = scale_transform_y @ C_new # Apply y-scale transform
-                if np.any(self.species[s].scale[2] != new_species[s].scale[2]): # If third scale parameter has changed
-                    scale_transform_z = scale_transform * np.float_power(self.species[s].scale[2,z_idx], a+b+c+1) / np.float_power(new_species[s].scale[2,z_idx], d+e+f+1) * np.float_power(self.species[s].scale[2,z_idx]**2 - new_species[s].scale[2,z_idx]**2, (d+e+f-a-b-c)/2)
+                if np.any(self.scale(s)[2] != new_scale[s,2]): # If third scale parameter has changed
+                    scale_transform_z = scale_transform * np.float_power(self.scale(s)[2,z_idx], a+b+c+1) / np.float_power(new_scale[s,2,z_idx], d+e+f+1) * np.float_power(self.scale(s)[2,z_idx]**2 - new_scale[s,2,z_idx]**2, (d+e+f-a-b-c)/2)
                     scale_transform_z = np.nan_to_num(scale_transform_z)
                     C_new = scale_transform_z @ C_new # Apply z-scale transform
 
                 np.seterr(divide='warn', invalid='warn') # Reset warning level for div-by-zero
 
                 self.dof[idx] = C_new # Set DOFs in new system
-        self.species = new_species
+        self.shifts = new_shift
+        self.scales = new_scale
 
 
-        # TODO: Add or remove Hermite modes
-        if np.any([np.any(self.species[s].num_modes != new_species[s].num_modes) for s in range(len(self.species))]): # Check if mode number was changed for any species
-            new_system_size = self.domain['N'] * np.sum([s.num_modes.prod() for s in new_species])
-            new_dof = np.zeros(new_system_size) # Allocate new DOF vector
-            new_dof_idx = self.indices_species(new_species) # Compute and store start and end indices for each species
+        # # TODO: Add or remove Hermite modes
+        # if np.any([np.any(self.species[s].num_modes != new_species[s].num_modes) for s in range(len(self.species))]): # Check if mode number was changed for any species
+        #     new_system_size = self.domain['N'] * np.sum([s.num_modes.prod() for s in new_species])
+        #     new_dof = np.zeros(new_system_size) # Allocate new DOF vector
+        #     new_dof_idx = self.indices_species(new_species) # Compute and store start and end indices for each species
 
-            # TODO: Move DOFs from old to new vector
-            for s in range(len(new_species)):
-                for i in range(self.species[s].num_modes[0]):
-                    for j in range(self.species[s].num_modes[1]):
-                        for k in range(self.species[s].num_modes[2]):
-                            # Uses same logic as indices_spatial() but for new species and new DOF vector
-                            s_idx = new_dof_idx[s] # Get start and end indices for species s
-                            num_modes_i, num_modes_j, num_modes_k = new_species[s].num_modes # Get max number of i, j, k modes
-                            start_idx = s_idx[0] + ((num_modes_i * num_modes_j) * k + num_modes_i * j + i) * self.domain['N'] # Compute start index for s, i, j, k
-                            end_idx = start_idx + self.domain['N'] # Compute end index from start index
-                            idx = np.arange(start_idx, end_idx)
+        #     # TODO: Move DOFs from old to new vector
+        #     for s in range(len(new_species)):
+        #         for i in range(self.species[s].num_modes[0]):
+        #             for j in range(self.species[s].num_modes[1]):
+        #                 for k in range(self.species[s].num_modes[2]):
+        #                     # Uses same logic as indices_spatial() but for new species and new DOF vector
+        #                     s_idx = new_dof_idx[s] # Get start and end indices for species s
+        #                     num_modes_i, num_modes_j, num_modes_k = new_species[s].num_modes # Get max number of i, j, k modes
+        #                     start_idx = s_idx[0] + ((num_modes_i * num_modes_j) * k + num_modes_i * j + i) * self.domain['N'] # Compute start index for s, i, j, k
+        #                     end_idx = start_idx + self.domain['N'] # Compute end index from start index
+        #                     idx = np.arange(start_idx, end_idx)
 
-                            # Write DOFs to new DOF vector
-                            # If new basis has fewer modes, then the cut off modes are removed
-                            # If new basis has more modes, then the remaining ones stay initialized with zeroes as the mode iteration doesn't reach all new modes
-                            new_dof[idx] = self.C(s, i, j, k)
+        #                     # Write DOFs to new DOF vector
+        #                     # If new basis has fewer modes, then the cut off modes are removed
+        #                     # If new basis has more modes, then the remaining ones stay initialized with zeroes as the mode iteration doesn't reach all new modes
+        #                     new_dof[idx] = self.C(s, i, j, k)
                             
-            # Write new DOFs and DOF indices to system
-            self.species = new_species
-            self.dof = new_dof
-            self.dof_idx = new_dof_idx
+        #     # Write new DOFs and DOF indices to system
+        #     self.species = new_species
+        #     self.dof = new_dof
+        #     self.dof_idx = new_dof_idx

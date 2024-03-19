@@ -93,7 +93,8 @@ class Solver:
         return root_vector # Return root vector
 
     def adapt(self, shift_mode=None, shift_threshold=0.01, scale_mode=None, scale_threshold=0.01, mode_add_thresholds=1e-12, mode_remove_threshold=1e-14):
-        new_species = deepcopy(self.sys.species)
+        new_shift = deepcopy(self.sys.shifts)
+        new_scale = deepcopy(self.sys.scales)
 
         # Compute current mean velocity and temperature
         # Change species shift and scaling parameter to new mean velocity & temperature
@@ -110,11 +111,11 @@ class Solver:
                 # Smooth candidate shift to prevent instability in shift parameter
                 candidate_shift = gaussian_filter1d(candidate_shift, self.sys.domain['N']/25, axis=1, mode="wrap")
                 
-                for i in range(3):
+                for i in [0,1,2]: # Iterate over velocity axes
                     if shift_mode == "t": candidate_shift[i] = candidate_shift[i].mean() # If adaptivity mode is only in time, use spatial average
-                    shift_adapt_mask = np.abs(new_species[s].shift[i] - candidate_shift[i]) > shift_threshold
+                    shift_adapt_mask = np.abs(new_shift[s,i] - candidate_shift[i]) > shift_threshold
                     if np.any(shift_adapt_mask):
-                        new_species[s].shift[i] = candidate_shift[i]
+                        new_shift[s,i] = candidate_shift[i]
                         shift_changed = True
                         print(f"Shift parameter adapted for species {s} in axis {i}")
 
@@ -126,16 +127,16 @@ class Solver:
                 candidate_scale[1] = np.sqrt(2) * thermal_velocity_tensor[1,1]
                 candidate_scale[2] = np.sqrt(2) * thermal_velocity_tensor[2,2]
 
-                for i in range(3):
+                for i in [0,1,2]: # Iterate over velocity axes
                     if scale_mode == "t": candidate_scale[i] = candidate_scale[i].mean() # If adaptivity mode is only in time, use spatial average
-                    scale_adapt_mask = np.abs(new_species[s].scale[i] - candidate_scale[i]) > scale_threshold
+                    scale_adapt_mask = np.abs(new_scale[s,i] - candidate_scale[i]) > scale_threshold
                     if np.any(scale_adapt_mask):
-                        new_species[s].scale[i] = candidate_scale[i]
+                        new_scale[s,i] = candidate_scale[i]
                         scale_changed = True
                         print(f"Scale parameter adapted for species {s} in axis {i}")
 
             species_changed += shift_changed or scale_changed
-        if species_changed > 0: self.sys.project(new_species) # Project system to new basis if any species changed basis
+        if species_changed > 0: self.sys.project(new_shift, new_scale) # Project system to new basis if any species changed basis
 
     def step(self, dt):
         # Set up new system to be modified in each JFNK inner iteration
