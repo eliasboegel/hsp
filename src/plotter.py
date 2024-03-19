@@ -18,7 +18,6 @@ class Plotter:
 
 
     def plot1V(self, sys, species_ids, t=None, E=None):
-        plt.close()
         gridspec = {'width_ratios': [20, 1], 'height_ratios': [3,1,1]}
         fig, axs = plt.subplots(3, 2, gridspec_kw=gridspec, figsize=(8,8))
         vals = np.zeros([sys.domain['N'], self.v_resolution])
@@ -88,10 +87,9 @@ class Plotter:
         
         if self.save_directory is not None: plt.savefig(f"{self.save_directory}/t{t:.4f}_vdf.png", bbox_inches='tight')
 
-        plt.clf() # Clear plot for any subsequent matplotlib calls
+        plt.close('all')
 
     def plot_coefficients(self, sys, s, modes, normalize=False, t=None):
-        plt.close()
         for i,j,k in modes:
             vals = sys.C(s,i,j,k)
             vals_max, vals_min = vals.max(), vals.min()
@@ -102,3 +100,4 @@ class Plotter:
         plt.legend()
         if t is not None: plt.gca().set_title(f"t = {t:.3f}")
         if self.save_directory is not None: plt.savefig(f"{self.save_directory}/t{t:.4f}_coefficients.png")
+        plt.close('all')
